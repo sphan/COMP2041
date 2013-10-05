@@ -22,7 +22,7 @@ sub main {
 		$line =~ s/;$//;
 		if ($line =~ /#!\/usr\/bin\/perl/) {
 			$header_content .= "#!/usr/bin/python2.7 -u\n";
-		} elsif ($line =~ /print/) {
+		} elsif ($line =~ /^\s*print/) {
 			handle_print($line);
 		} elsif ($line =~ /^\s*\#/ || $line =~ /^\s*$/) {
 			$main_content .= $line;
@@ -34,6 +34,10 @@ sub main {
 			handle_stdin($line);
 		} elsif ($line =~ /chomp/) {
 			handle_chomp($line);
+		} elsif ($line =~ /join\(.*?\)/) {
+			handle_join($line);
+		} elsif ($line =~ /foreach/ || $line =~ /for/) {
+			handle_for_loops($line);
 		} else {
 			$line = handle_variable($line);
 			$line =~ s/last/break/g;
@@ -60,6 +64,13 @@ sub has_variable {
 	return 0;
 }
 
+sub insert_sys_import {
+	if ($sys_imported == 0) {
+		$header_content .= "import sys\n";
+		$sys_imported = 1;
+	}
+}
+
 sub handle_chomp {
 	my $line = $_[0];
 	$line = handle_variable($line);
@@ -73,10 +84,7 @@ sub handle_stdin {
 	my $line = $_[0];
 	$line = handle_variable($line);
 	$line =~ s/<STDIN>/sys.stdin.readline()/;
-	if ($sys_imported == 0) {
-		$header_content .= "import sys\n";
-		$sys_imported = 1;
-	}
+	insert_sys_import();
 	$main_content .= $line;
 }
 
@@ -99,8 +107,35 @@ sub handle_if_while {
 	}
 }
 
+sub handle_for_loops {
+	my $line = $_[0];
+	my ($spaces) = /(\s*)foreach/;
+	my $contents = split(/\s+/, $line);
+
+}
+
 sub handle_join {
-	
+	my $line = $_[0];
+	my ($content) = $line =~ /\((.*?)\)/;
+	my @subContents = split(/,\s*/, $content);
+	my $delimiter = $subContents[0];
+	$main_content .= "$delimiter.join(";
+	my $temp = "";
+	for (my $i = 1; $i < @subContents; $i += 1) {
+		if (exists $syntax_table{$subContents[$i]}) {
+			$temp .= $syntax_table{$subContents[$i]};
+			insert_sys_import() if ($syntax_table{$subContents[$i]} =~ /sys/);
+		} else {
+			$temp .= $subContents[$i];
+		}
+		next if (@subContents == 2 || $i + 1 == @subContents);
+		$temp .= ", ";
+	}
+	if (@subContents > 2) {
+		$main_content .= "[$temp])\n";
+	} else {
+		$main_content .= $temp . ")\n";
+	}
 }
 
 sub handle_print {
@@ -109,7 +144,11 @@ sub handle_print {
 	my ($spaces) = $line =~ /(\s*print\s*)/;
 	$line =~ s/\s*print\s*//g;
 	$main_content .= $spaces;
-	print $line;
+	if ($line =~ /join\(.*?\)/) {
+		handle_join($line);
+		return;
+#		last;
+	}
 	my @parts = split(/(, )|(\. )/, $line);
 	my $count = 0;
 	foreach my $p (@parts) {
@@ -129,6 +168,7 @@ sub set_up_syntax_table {
 	$syntax_table{'@ARGV'} = "sys.argv[1:]";
 	$syntax_table{"last"} = "break";
 	$syntax_table{"next"} = "continue";
+	$syntax_table{"foreach"} = "for";
 
 
 	# compound assignment
