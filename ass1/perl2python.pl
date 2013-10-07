@@ -47,7 +47,13 @@ sub main {
 	} elsif ($line =~ /^\s*if/ || $line =~ /^\s*while/) {
 		handle_if_while($line);
 	} elsif ($line =~ /}/) {
-		next;
+#		next;
+	} elsif ($line =~ /.*?\+\+/ || $line =~ /.*?\-\-/) {
+		handle_crementation($line);
+	} elsif ($line =~ /.*\=\~/) {
+		handle_regex($line);
+	} elsif ($line =~ /push|pop|shift|unshift/) {
+		handle_array_op($line);
 	} elsif ($line =~ /STDIN/) {
 		handle_stdin($line);
 	} elsif ($line =~ /chomp/) {
@@ -56,6 +62,9 @@ sub main {
 		handle_join($line);
 	} elsif ($line =~ /^\s*foreach/ || $line =~ /^\s*for/) {
 		handle_for_loops($line);
+	} elsif ($line =~ /^@\w+/) {
+		$line =~ tr/\(\)/\[\]/;
+		$main_content .= handle_variable($line);
 	} else {
 		$line = handle_variable($line);
 		$line =~ s/last/break/g;
@@ -115,14 +124,41 @@ sub handle_stdin {
 	$main_content .= $line;
 }
 
+sub handle_array_op {
+	my $line = $_[0];
+	$line = handle_variable($line);
+	my @components = split(/[\s,]+/, $line);
+	$main_content .= $components[1] . ".";
+	if ($components[2] =~ /\(.*?\)/) {
+
+	} else {
+		if (exists 
+	}
+}
+
+sub handle_crementation {
+	my $line = $_[0];
+	my ($spaces) = $line=~ /(\s*).*/;
+	my ($var) = $line =~ /\$(\w+)/;
+	if ($line =~ /\+\+/) {
+		$main_content .= $spaces . $var . " += 1\n";
+	} elsif ($line =~ /\-\-/) {
+		$main_content .= $spaces . $var . " -= 1\n";
+	}
+}
+
 sub handle_if_while {
 	my $line = $_[0];
 	$line = handle_variable($line);
 	$line =~ s/(\)|\()//g;
 	my @subContents = split(/ /, $line);
-	if ($line =~ /<>/ || $line =~ /<STDIN>/) {
+	if ($line =~ /<>/) {
 		$main_content .= "for $subContents[1] in fileinput.input():\n";
 		handle_imports("fileinput");
+		return;
+	} elsif ($line =~ /<STDIN>/) {
+		$main_content .= "for $subContents[1] in sys.stdin:\n";
+		handle_imports("sys");
 		return;
 	}
 	$line =~ s/ {/:/g;
@@ -147,7 +183,6 @@ sub handle_for_loops {
 	if (($spaces) = $line =~ /(\s*)foreach/) {
 		$temp = $spaces;
 	}
-#	print $var_to_loop;
 	$temp .= "for ";
 	if ($var_to_loop =~ /.*;.*;.*/) {
 		my ($var) = $var_to_loop =~ /\$(\w+).*/;
@@ -173,6 +208,34 @@ sub handle_for_loops {
 		$temp .= handle_variable($var_to_loop) . ":";
 	}
 	$main_content .= $temp . "\n";
+}
+
+sub handle_regex {
+	my $line = $_[0];
+	my ($pattern, $replaceStr, $flag);
+	my ($spaces) = $line =~ /(\s*).*/;
+	my ($var) = $line =~ /\$(\w+)/;
+	$main_content .= $spaces . $var . " = ";
+	my ($command) = $line =~ /(\w*)\/.*?\//;
+	handle_imports("re");
+	if ($command eq "qw") {
+		($pattern) = $line =~ /qw\{(.*?)\}/;
+	} elsif ($command ne "") {
+		($pattern, $replaceStr, $flag) = $line =~ /\w*\/(.*?)\/(.*?)\/(\w*)/;
+	} else {
+		my ($pattern, $flag) = $line =~ /\w*\/(.*?)\/(\w*)/;
+	}
+	if ($command =~ /s/) {
+		$main_content .= "re.sub(r\'$pattern\', \'$replaceStr\', $var)\n";
+	} elsif ($command =~ /qw/) {
+		$main_content .= "re.compile(\'$pattern\')\n";
+	} elsif ($command eq "") {
+		if (length($flag) > 1) {
+#			my @flags = split(//, $flag);
+		} else {
+	
+		}
+	}
 }
 
 sub handle_join {
@@ -251,4 +314,10 @@ sub set_up_syntax_table {
 	$syntax_table{"&&"} = "and";
 	$syntax_table{"||"} = "or";
 	$syntax_table{"!"} = "not";
+
+	# array operatation
+	$syntax_table{"push"} = "append";
+	$syntax_table{"pop"} = "pop";
+	$syntax_table{"unshift"} = "insert";
+	$syntax_table{"shift"} = "pop";
 }
