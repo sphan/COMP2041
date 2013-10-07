@@ -62,9 +62,8 @@ sub main {
 		handle_join($line);
 	} elsif ($line =~ /^\s*foreach/ || $line =~ /^\s*for/) {
 		handle_for_loops($line);
-	} elsif ($line =~ /^@\w+/) {
-		$line =~ tr/\(\)/\[\]/;
-		$main_content .= handle_variable($line);
+	} elsif ($line =~ /^@\w+/ || $line =~ /\$\#\w+/ || $line =~ /scalar\(\@\w+\)/) {
+		handle_array($line);
 	} else {
 		$line = handle_variable($line);
 		$line =~ s/last/break/g;
@@ -144,6 +143,17 @@ sub handle_array_op {
 		$components[2] = 0;
 	}
 	$main_content .= "($components[2])\n";
+}
+
+sub handle_array {
+	my $line = $_[0];
+	if ($line =~ /\$\#\w+/ || $line =~ /scalar\(\@\w+\)/) {
+		my ($var) = $line =~ /\$\#(\w+)|.*\@(\w+)/;
+		$line = "len($var)";
+	}
+	$line = handle_variable($line);
+	$line =~ tr/\(\)/\[\]/;
+	$main_content .= $line . "\n";
 }
 
 sub handle_crementation {
