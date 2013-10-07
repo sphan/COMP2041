@@ -47,7 +47,7 @@ sub main {
 	} elsif ($line =~ /^\s*if/ || $line =~ /^\s*while/) {
 		handle_if_while($line);
 	} elsif ($line =~ /}/) {
-#		next;
+		next;
 	} elsif ($line =~ /STDIN/) {
 		handle_stdin($line);
 	} elsif ($line =~ /chomp/) {
@@ -88,9 +88,13 @@ sub handle_imports {
 			$sys_imported = 1;
 		}
 	} elsif ($lib =~ /re/) {
-
+		next if ($re_imported != 0);
+		$header_content .= "import re\n";
+		$re_imported = 1;
 	} elsif ($lib =~ /fileinput/) {
-
+		next if ($fileinput_imported != 0);
+		$header_content .= "import fileinput\n";
+		$fileinput_imported = 1;
 	}
 }
 
@@ -115,8 +119,13 @@ sub handle_if_while {
 	my $line = $_[0];
 	$line = handle_variable($line);
 	$line =~ s/(\)|\()//g;
-	$line =~ s/ {/:/g;
 	my @subContents = split(/ /, $line);
+	if ($line =~ /<>/ || $line =~ /<STDIN>/) {
+		$main_content .= "for $subContents[1] in fileinput.input():\n";
+		handle_imports("fileinput");
+		return;
+	}
+	$line =~ s/ {/:/g;
 	my $count = 1;
 	foreach my $s (@subContents) {
 		if (exists $syntax_table{$s}) {
