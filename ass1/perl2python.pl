@@ -64,6 +64,10 @@ sub main {
 		handle_for_loops($line);
 	} elsif ($line =~ /^@\w+/ || $line =~ /\$\#\w+/ || $line =~ /scalar\(\@\w+\)/) {
 		handle_array($line);
+	} elsif ($line =~ /scalar\(keys.*?\)|exists|delete|keys|values/) {
+		handle_hash_op($line);
+	} elsif ($line =~ /\%\w+/ || $line =~ /\{.*?\}/) {
+		handle_hash($line);
 	} else {
 		$line = handle_variable($line);
 		$line =~ s/last/break/g;
@@ -154,6 +158,39 @@ sub handle_array {
 	$line = handle_variable($line);
 	$line =~ tr/\(\)/\[\]/;
 	$main_content .= $line . "\n";
+}
+
+sub handle_hash_op {
+	my $line = $_[0];
+	print $line;
+	my ($var) = $line =~ /\%(\w+)|\$(\w+)\{/;
+	$line = handle_variable($line);
+	print $line;
+	$line =~ tr/\{\}/\[\]/;
+	if ($line =~ /scalar/) {
+		$line = "len($var)\n";
+	} elsif ($line =~ /exists/) {
+		my ($val) = $line =~ /\[.*?\]/;
+		$line = "$val in $var";
+	} elsif ($line =~ /delete/) {
+		$line =~ s/delete\s+//g;
+		$line = "del $line";
+	}
+	$main_content .= "$line\n";
+}
+
+sub handle_hash {
+	my $line = $_[0];
+	print $line;
+	$line = handle_variable($line);
+	$line =~ s/=>/:/g;
+	if ($line =~ /\(.*?\)/) {
+		$line =~ tr/\(\)/\{\}/;
+	} elsif ($line =~ /\{.*?\}/) {
+		$line =~ tr/\{\}/\[\]/;
+		print $line;
+	}
+	$main_content .= "$line\n";
 }
 
 sub handle_crementation {
