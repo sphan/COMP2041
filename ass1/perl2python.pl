@@ -52,7 +52,7 @@ sub main {
 		handle_crementation($line);
 	} elsif ($line =~ /.*\=\~/) {
 		handle_regex($line);
-	} elsif ($line =~ /push|pop|shift|unshift/) {
+	} elsif ($line =~ /push|pop|shift|unshift|reverse/) {
 		handle_array_op($line);
 	} elsif ($line =~ /STDIN/) {
 		handle_stdin($line);
@@ -127,13 +127,23 @@ sub handle_stdin {
 sub handle_array_op {
 	my $line = $_[0];
 	$line = handle_variable($line);
-	my @components = split(/[\s,]+/, $line);
+	my @components = split(/[\s]+/, $line);
 	$main_content .= $components[1] . ".";
-	if ($components[2] =~ /\(.*?\)/) {
-
+	if ($components[2] && $components[2] =~ /\(.*?\)/) {
+		$main_content .= "extend";
 	} else {
-		if (exists 
+		if (exists $syntax_table{$components[0]}) {
+			$main_content .= $syntax_table{$components[0]};
+		}
 	}
+	if ($components[2] && $components[2] =~ /\(.*?\)/) {
+		$components[2] =~ tr/\(\)/\[\]/;
+	} elsif ($components[0] =~ /unshift/) {
+		$components[2] = "0, $components[2]";
+	} elsif ($components[0] =~ /shift/) {
+		$components[2] = 0;
+	}
+	$main_content .= "($components[2])\n";
 }
 
 sub handle_crementation {
@@ -320,4 +330,5 @@ sub set_up_syntax_table {
 	$syntax_table{"pop"} = "pop";
 	$syntax_table{"unshift"} = "insert";
 	$syntax_table{"shift"} = "pop";
+	$syntax_table{"reverse"} = "reverse";
 }
