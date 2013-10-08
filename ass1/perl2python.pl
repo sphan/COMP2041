@@ -36,8 +36,16 @@ sub main {
 		handle_print($line);
 	} else {
 		my ($spaces) = $line =~ /(\s*)\w/;
+		my @line_content = ();
 		my @components = split(/\s/, $line);
-		
+		foreach my $c (@components) {
+			if (exists $syntax_table{$c}) {
+				push @line_content, $c;
+			} else {
+				$c = handle_variable($c);
+				push @line_content, $c;
+			}
+		}
 	}
 	print_output();
 }
