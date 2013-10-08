@@ -104,10 +104,23 @@ sub set_up_syntax_table {
 	$syntax_table{"<STDIN>"} = "sys.stdin.readline()";
 	
 	# logical operators
+	$syntax_table{"&&"} = "and";
+	$syntax_table{"||"} = "or";
+	$syntax_table{"!"} = "not";
+	
+	# comparison operators
 	$syntax_table{"eq"} = "==";
 	$syntax_table{"ne"} = "!=";
 	$syntax_table{"lt"} = "<";
 	$syntax_table{"le"} = "<=";
 	$syntax_table{"gt"} = ">";
 	$syntax_table{"ge"} = ">=";
+	
+	# compound operators
+	$syntax_table{".="} = "+=";
+	$syntax_table{"x="} = "*=";
+	$syntax_table{"&&="} = "&=";
+	$syntax_table{"||="} = "|=";
+	
+	$syntax_table{"undef"} = "None";
 }
