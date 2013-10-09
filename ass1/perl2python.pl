@@ -6,6 +6,9 @@ my $input_file = "";
 my $header_content = "";
 my @main_content = ();
 my %syntax_table = ();
+my $sys_imported = 0;
+my $fileinput_imported = 0;
+my $re_imported = 0;
 
 if (@ARGV > 0) {
 	$input_file = $ARGV[0];
@@ -45,7 +48,7 @@ sub main {
 		my @components = split(/\s/, $line);
 		foreach my $c (@components) {
 			if (exists $syntax_table{$c}) {
-				push @line_content, "$c";
+				push @line_content, $syntax_table{$c};
 			} else {
 				$c = handle_variable($c);
 				push @line_content, "$c";
@@ -81,6 +84,17 @@ sub has_variable {
 	return 0;
 }
 
+sub handle_imports {
+	my $lib = $_[0];
+	if ($lib eq "sys") {
+		$header_content .= "import sys\n" if (!$sys_imported);
+	} elsif ($lib eq "re") {
+		$header_content .= "import re\n" if (!$re_imported);
+	} elsif ($lib eq "fileinput") {
+		$header_content .= "import fileinput\n" if (!$fileinput_imported);
+	}
+}
+
 sub handle_if_while {
 	my $line = $_[0];
 	my @line_content = ();
@@ -93,9 +107,12 @@ sub handle_if_while {
 	# print $condition;
 	my @components = split(/\s/, $condition);
 	foreach my $c (@components) {
+		
 		if (exists $syntax_table{$c}) {
+			print $syntax_table{$c};
 			push @line_content, $syntax_table{$c};
 		} else {
+		print "$c";
 			push @line_content, handle_variable($c);
 		}
 	}
