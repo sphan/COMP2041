@@ -229,28 +229,40 @@ sub handle_array_op {
 	my $line = $_[0];
 	$line = handle_variable($line);
 	my $string = "";
+	my ($op, $varFrom, $value);
 	my ($space) = $line =~ /(\s*)\w/;
-	my ($op, $var2) =~ /\s*=\s*(\w+)\s*(\w+)/;
-	# print $var1 if ($var1);
-	print $op, $var2;
-	# my @components = split(/[\s]+/, $line);
-	# $components[1] =~ s/,//g;
-	# $string .= $space;
-	# if ($line =~ /reverse/ && @components == 2) {
-		# $string .= $components[1] . ".[::-1]";
-	# } elsif ($line =~ /reverse/ && @components > 2) {
-		# $string .= "$components[0] = " . $components[3] . ".reverse()";
-	# } elsif ($components[2] && $components[2] =~ /\(.*?\)/) {
-		# $components[2] =~ tr/\(\)/\[\]/;
-		# $string .= "$components[1].extend";
-	# } else {
-		# if (exists $syntax_table{$components[0]}) {
-			# $string .= "$components[1].$syntax_table{$components[0]}";
-		# }
-	# }
-	# $components[2] = "0, $components[2]" if ($components[0] =~ /unshift/);
-	# $components[2] = 0 if ($components[0] =~ /shift/);
-	# $string .= "($components[2])" if ($components[2] && $line !~ /reverse/);
+	my ($varTo) = $line =~ /(\w+)\s*\=\s*/;
+	if ($varTo) {
+		($op, $varFrom) = $line =~ /\w+\s*\=\s*(\w+)\s*(\w+)/;
+		($value) = $line =~ /, (.*)/;
+	} else {
+		($op, $varFrom) = $line =~ /(\w+)\s*(\w+)/;
+		($value) = $line =~ /, (.*)/;
+	}
+	
+	if ($varTo) {
+		$string .= $space . $varTo . " = ";
+	}
+	$string .= $varFrom;
+	if ($value && $value =~ /\(.*?\)/) {
+		$value =~ tr/\(\)/\[\]/;
+		$string .= ".extend";
+	} elsif (exists $syntax_table{$op}) {
+		$string .= ".$syntax_table{$op}";
+	}
+	
+	$value = '0, ' . "$value" if ($op =~ /unshift/);
+	$value = "0" if ($op =~ /\s+shift\s+/);
+	print $value if $value;
+	if ($value) {
+		$string .= "($value)";
+	} else {
+		if ($op =~ /\s+shift\s+/) {
+			$string .= "(0)";
+		} else {
+			$string .= "()";
+		}
+	}
 	return $string;
 }
 
@@ -473,4 +485,5 @@ sub set_up_syntax_table {
 	$syntax_table{"pop"} = "pop";
 	$syntax_table{"shift"} = "shift";
 	$syntax_table{"unshift"} = "unshift";
+	$syntax_table{"reverse"} = "reverse";
 }
