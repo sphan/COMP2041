@@ -19,12 +19,14 @@ sub read_from_file {
 	while (my $line = <F>) {
 		main($line);	
 	}
+	print_output();
 }
 
 sub read_from_stdin {
 	while (my $line = <STDIN>) {
 		main($line);	
 	}
+	print_output();
 }
 
 sub main {
@@ -34,20 +36,24 @@ sub main {
 		$header_content .= "#!/usr/bin/python2.7 -u\n";
 	} elsif ($line =~ /^\s*print/) {
 		handle_print($line);
+	} elsif ($line =~ /^\s*if/ || $line =~ /^\s*while/) {
+		handle_if_while($line);
 	} else {
 		my ($spaces) = $line =~ /(\s*)\w/;
 		my @line_content = ();
 		my @components = split(/\s/, $line);
 		foreach my $c (@components) {
 			if (exists $syntax_table{$c}) {
-				push @line_content, $c;
+				push @line_content, "$c";
 			} else {
 				$c = handle_variable($c);
-				push @line_content, $c;
+				push @line_content, "$c";
 			}
 		}
+		@line_content = join(" ", @line_content);
+		push @line_content, "\n";
+		push @main_content, @line_content;
 	}
-	print_output();
 }
 
 sub print_output {
@@ -74,6 +80,14 @@ sub has_variable {
 	return 0;
 }
 
+sub handle_if_while {
+	my $line = $_[0];
+}
+
+sub handle_join {
+	my $line = $_[0];
+}
+
 sub handle_print {
 	my $line = $_[0];
 	$line =~ s/\\[rn]//g;
@@ -86,30 +100,37 @@ sub handle_print {
 	# print @components;
 	foreach my $c (@components) {
 		my ($inside_quotes) = $c =~ /"(.*?)"/;
-		my @words = split(/\s/, $inside_quotes);
-		my $string = "";
-		my $var = "";
-		my $was_variable = 0;
-		my $was_string = 0;
-		foreach my $w (@words) {
-			if (has_variable($w)) {
-				$w = handle_variable($w);
-				$var .= "," if ($was_string);
-				$var .= " $w";
-				push @line_content, $var;
-				$was_variable = 1;
-			} else {
-				$string .= "," if ($was_variable);
-				$string .= " $w";
+		if ($inside_quotes) {
+			my @words = split(/\s/, $inside_quotes);
+			my $string = "";
+			my $var = "";
+			my $was_variable = 0;
+			my $was_string = 0;
+			foreach my $w (@words) {
+				if (has_variable($w)) {
+					$w = handle_variable($w);
+					$var .= "," if ($was_string);
+					$var .= "$w";
+					push @line_content, $var;
+					$was_variable = 1;
+				} else {
+					$string .= "," if ($was_variable);
+					$string .= " $w";
+				}
 			}
-		}
-		push @line_content, $string;
+			push @line_content, "\"$string\"" if ($string);
+		} else {
+			push @line_content, handle_variable($c) if ($c !~ "\"\"");
+		}	
 	}
-	print @line_content;
+	@line_content = join(" ", @line_content);
+	push @line_content, "\n";
+	push @main_content, @line_content;
 }
 
 sub set_up_syntax_table {
 	$syntax_table{"<STDIN>"} = "sys.stdin.readline()";
+	$syntax_table{'@ARGV'} = "sys.argv[1:]";
 	
 	# logical operators
 	$syntax_table{"&&"} = "and";
