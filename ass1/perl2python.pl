@@ -48,11 +48,9 @@ sub main {
 		handle_print($line);
 	# handle if else statements and while statements
 	} elsif ($line =~ /^\s*if/ || $line =~ /\}\s*else/ || $line =~ /elsif/ || $line =~ /^\s*while/) {
-		print $line;
 		handle_if_while($line);
 	# skip if line is '}'
 	} elsif ($line =~ "}") {
-		print $line;
 		return;
 	# handle lines with chomp
 	} elsif ($line =~ /chomp/) {
@@ -74,7 +72,7 @@ sub main {
 		$line .= "\n";
 		push @main_content, $line;
 	# handle hashes
-	} elsif ($line =~ /\%\w+/ || $line =~ /\$\w+\{.*?\}/) {
+	} elsif ($line =~ /delete\s*\$\w+\{.*?\}/ || $line =~ /\%\w+/ || $line =~ /\$\w+\{.*?\}/) {
 		$line = handle_hash($line);
 		$line .= "\n";
 		push @main_content, $line;
@@ -96,6 +94,11 @@ sub main {
 		my ($spaces) = $line =~ /(\s*)\w/;
 		my @line_content = ();
 		my @components = split(/\s/, $line);
+		if ($line =~ /\%\w+/ || $line =~ /\$\w+\{.*?\}/) {
+			$line = handle_hash($line);
+			push @main_content, $line;
+			return;
+		}
 		foreach my $c (@components) {
 			if (exists $syntax_table{$c}) {
 				push @line_content, $syntax_table{$c};
@@ -291,12 +294,22 @@ sub handle_hash {
 	$line =~ tr/\"/\'/;
 	$line =~ s/=>/:/g;
 	$line = handle_variable($line);
+	my ($space) = $line =~ /(\s*)\w+/;
 	
 	if ($line =~ /exists/) {
-		my ($space) = $line =~ /(\s*)\w+/;
 		my ($ele) = $line =~ /[\"\'](.*?)[\"\']/;
 		my ($var) = $line =~ /(\w+)\[.*?\]/;
 		$line = $space . "\'$ele\'" . " in $var";
+	} elsif ($line =~ /delete/) {
+		$line =~ s/delete/del/g;
+		print $line;
+	} elsif ($line =~ /keys/) {
+		my ($var) = $line =~ /keys\s*(\w+)/;
+		$line = $space . "$var.keys()";
+	} elsif ($line =~ /values/) {
+		print $line;
+		my ($var) = /values\s*(\w+)/;
+		$line = $space . "$var.values()";
 	}
 	return $line;
 }
@@ -309,7 +322,6 @@ sub handle_if_while {
 	my ($space) = $line =~ /(\s*)\w+/;
 	$line =~ s/$space\s*//;
 	push @line_content, $space if ($space ne "");
-#	print $line;
 	if ($line =~ /\<\>/) {
 		my $var = $line =~ /\$(\w+)/;
 		push @line_content, "for ";
@@ -329,9 +341,7 @@ sub handle_if_while {
 		# print $condition;
 		if ($condition =~ /exists/) {
 			$condition = handle_hash($condition);
-			print $condition;
 			push @line_content, $condition;
-			print @line_content;
 		} else {
 			my @components = split(/\s/, $condition);
 			foreach my $c (@components) {
@@ -385,6 +395,8 @@ sub handle_for_loop {
 			}
 		} elsif ($thing_to_loop =~ /\w+\,\w+\,/) {
 			push @line_content, '[' . $thing_to_loop . ']';
+		} elsif ($thing_to_loop =~ /keys\s*\%\w+/) {
+			push @line_content, handle_hash($thing_to_loop);
 		} else {
 			if (exists $syntax_table{$thing_to_loop}) {
 				push @line_content, $syntax_table{$thing_to_loop};
