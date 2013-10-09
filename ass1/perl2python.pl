@@ -47,10 +47,13 @@ sub main {
 	} elsif ($line =~ /^\s*print/) {
 		handle_print($line);
 	# handle if else statements and while statements
-	} elsif ($line =~ /^\s*if/ || $line =~ /else/ || $line =~ /elsif/ || $line =~ /^\s*while/) {
+	} elsif ($line =~ /^\s*if/ || $line =~ /\}\s*else/ || $line =~ /elsif/ || $line =~ /^\s*while/) {
+		print $line;
 		handle_if_while($line);
 	# skip if line is '}'
 	} elsif ($line =~ "}") {
+		print $line;
+		return;
 	# handle lines with chomp
 	} elsif ($line =~ /chomp/) {
 		handle_chomp($line);
@@ -65,11 +68,17 @@ sub main {
 		$line = handle_array_op($line);
 		$line .= "\n";
 		push @main_content, $line;
-	# handle regex
+	# handle arrays
 	} elsif ($line =~ /\@/) {
 		$line = handle_array($line);
 		$line .= "\n";
 		push @main_content, $line;
+	# handle hashes
+	} elsif ($line =~ /\%\w+/ || $line =~ /\$\w+\{.*?\}/) {
+		$line = handle_hash($line);
+		$line .= "\n";
+		push @main_content, $line;
+	# handle regex
 	} elsif ($line =~ /\=\~/) {
 		handle_regex($line);
 	# handle lines with join
@@ -100,10 +109,6 @@ sub main {
 		push @line_content, "\n";
 		push @main_content, @line_content;
 		$unsure_line = $line_count;
-		# my %index;
-		# @index{@main_content} = (0..$#main_content);
-		# my $index = $index{\@line_content};
-		# print $index, "\n";
 	}
 }
 
@@ -182,7 +187,7 @@ sub handle_split {
 	my ($delimiter) = $components[0] =~ /\/(.*?)\//;
 	push @line_content, $space;
 	push @line_content, "$var = " if ($var);
-	if ($delimiter !~ /\\s+/) {
+	if ($delimiter && $delimiter !~ /\\s+/) {
 		push @line_content, "re.split(\'$delimiter\', $components[1])";
 	} else {
 		push @line_content, $components[1];
@@ -253,7 +258,6 @@ sub handle_array_op {
 	
 	$value = '0, ' . "$value" if ($op =~ /unshift/);
 	$value = "0" if ($op =~ /\s+shift\s+/);
-	print $value if $value;
 	if ($value) {
 		$string .= "($value)";
 	} else {
@@ -278,6 +282,25 @@ sub handle_array {
 	return $line;
 }
 
+sub handle_hash {
+	my $line = $_[0];
+	if ($line =~ /\$\w+\{.*?\}/) {
+		$line =~ tr/\{\}/\[\]/;
+	}
+	$line =~ tr/\(\)/\{\}/;
+	$line =~ tr/\"/\'/;
+	$line =~ s/=>/:/g;
+	$line = handle_variable($line);
+	
+	if ($line =~ /exists/) {
+		my ($space) = $line =~ /(\s*)\w+/;
+		my ($ele) = $line =~ /[\"\'](.*?)[\"\']/;
+		my ($var) = $line =~ /(\w+)\[.*?\]/;
+		$line = $space . "\'$ele\'" . " in $var";
+	}
+	return $line;
+}
+
 sub handle_if_while {
 	my $line = $_[0];
 	my @line_content = ();
@@ -285,8 +308,8 @@ sub handle_if_while {
 	$line =~ s/elsif/elif/;
 	my ($space) = $line =~ /(\s*)\w+/;
 	$line =~ s/$space\s*//;
-	push @line_content, $space;
-	# print $line;
+	push @line_content, $space if ($space ne "");
+#	print $line;
 	if ($line =~ /\<\>/) {
 		my $var = $line =~ /\$(\w+)/;
 		push @line_content, "for ";
@@ -304,13 +327,20 @@ sub handle_if_while {
 		push @line_content, $line =~ /\s*(\w+)/;
 		$line =~ s/$condition//;
 		# print $condition;
-		my @components = split(/\s/, $condition);
-		foreach my $c (@components) {
-			if (exists $syntax_table{$c}) {
-				push @line_content, $syntax_table{$c};
-				handle_imports("sys") if ($syntax_table{$c} =~ /sys/);
-			} else {
-				push @line_content, handle_variable($c);
+		if ($condition =~ /exists/) {
+			$condition = handle_hash($condition);
+			print $condition;
+			push @line_content, $condition;
+			print @line_content;
+		} else {
+			my @components = split(/\s/, $condition);
+			foreach my $c (@components) {
+				if (exists $syntax_table{$c}) {
+					push @line_content, $syntax_table{$c};
+					handle_imports("sys") if ($syntax_table{$c} =~ /sys/);
+				} else {
+					push @line_content, handle_variable($c);
+				}
 			}
 		}
 		@line_content = join(" ", @line_content);
@@ -325,7 +355,7 @@ sub handle_for_loop {
 	my @line_content = ();
 	my ($thing_to_loop) = $line =~ /\((.*?)\)/;
 	my ($space) = $line =~ /(\s*)\w/;
-	push @line_content, $space;
+	push @line_content, $space if ($space ne "");
 	push @line_content, "for";
 	if ($thing_to_loop =~ /.*;.*;.*/) { # handle for loops in form of 'for ($i = 0; $i < 5; $i++)'
 		
@@ -404,10 +434,10 @@ sub handle_print {
 	my $line = $_[0];
 	$line =~ s/\\[rn]//g;
 	my @line_content = ();
-	my ($spaces) = $line =~ /(\s*print)/;
+	my ($space) = $line =~ /(\s*print)/;
 	# print $spaces;
-	push @line_content, $spaces;
-	$line =~ s/$spaces//;
+	push @line_content, $space if ($space ne "");
+	$line =~ s/$space//;
 	if ($line =~ /join\(.*?\)/) {
 		my $string = handle_join($line);
 		$line =~ s/join\(.*?\)//;
@@ -416,6 +446,11 @@ sub handle_print {
 	my @components = split(/,\s|\.\s/, $line);
 	# print @components;
 	foreach my $c (@components) {
+		if ($c =~ /\$\w+\{.*?\}/) {
+			$c = handle_hash($c);
+			push @line_content, $c;
+			next;
+		}
 		my ($inside_quotes) = $c =~ /"(.*?)"/;
 		if ($inside_quotes) {
 			my @words = split(/\s/, $inside_quotes);
