@@ -112,7 +112,6 @@ sub handle_if_while {
 			print $syntax_table{$c};
 			push @line_content, $syntax_table{$c};
 		} else {
-		print "$c";
 			push @line_content, handle_variable($c);
 		}
 	}
@@ -124,6 +123,32 @@ sub handle_if_while {
 
 sub handle_join {
 	my $line = $_[0];
+	my @line_content = ();
+	my ($var) = $line =~ /[\$\@\%](\w+)\s*=\s*join/;
+	my ($content) = $line =~ /\((.*?)\)/;
+	my @subContents = split(/,\s*/, $content);
+	my $delimiter = $subContents[0];
+	if ($var) {
+		push @line_content, "$var = ";
+	}
+	push @line_content, "$delimiter.join(";
+	my $temp = "";
+	for (my $i = 1; $i < @subContents; $i += 1) {
+		if (exists $syntax_table{$subContents[$i]}) {
+			$temp .= $syntax_table{$subContents[$i]};
+			handle_imports("sys") if ($syntax_table{$subContents[$i]} =~ /sys/);
+		} else {
+			$temp .= $subContents[$i];
+		}
+		next if (@subContents == 2 || $i + 1 == @subContents);
+		$temp .= ", ";
+	}
+	if (@subContents > 2) {
+		push @line_content, "[$temp])";
+	} else {
+		push @line_content, "$temp)";
+	}
+	push @main_content, @line_content;
 }
 
 sub handle_print {
