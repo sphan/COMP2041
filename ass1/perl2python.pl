@@ -38,6 +38,7 @@ sub main {
 		handle_print($line);
 	} elsif ($line =~ /^\s*if/ || $line =~ /^\s*while/) {
 		handle_if_while($line);
+	} elsif ($line =~ "}") {
 	} else {
 		my ($spaces) = $line =~ /(\s*)\w/;
 		my @line_content = ();
@@ -82,6 +83,25 @@ sub has_variable {
 
 sub handle_if_while {
 	my $line = $_[0];
+	my @line_content = ();
+	my ($space) = $line =~ /(\s*\w+)/;
+	$line =~ s/$space//;
+	push @line_content, $space;
+	my ($condition) = $line =~ /\((.*?)\)/;
+	$line =~ s/$condition//;
+	# print $condition;
+	my @components = split(/\s/, $condition);
+	foreach my $c (@components) {
+		if (exists $syntax_table{$c}) {
+			push @line_content, $syntax_table{$c};
+		} else {
+			push @line_content, handle_variable($c);
+		}
+	}
+	@line_content = join(" ", @line_content);
+	push @line_content, ":" if ($line =~ /\s*{/);
+	push @line_content, "\n";
+	push @main_content, @line_content;
 }
 
 sub handle_join {
@@ -131,6 +151,8 @@ sub handle_print {
 sub set_up_syntax_table {
 	$syntax_table{"<STDIN>"} = "sys.stdin.readline()";
 	$syntax_table{'@ARGV'} = "sys.argv[1:]";
+	$syntax_table{"last"} = "break";
+	$syntax_table{"next"} = "continue";
 	
 	# logical operators
 	$syntax_table{"&&"} = "and";
