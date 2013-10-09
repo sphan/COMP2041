@@ -9,6 +9,8 @@ my %syntax_table = ();
 my $sys_imported = 0;
 my $fileinput_imported = 0;
 my $re_imported = 0;
+my $line_count = 0;
+my $unsure_line = 0;
 
 if (@ARGV > 0) {
 	$input_file = $ARGV[0];
@@ -41,23 +43,30 @@ sub main {
 		$header_content .= "#!/usr/bin/python2.7 -u\n";
 	} elsif ($line =~ /^\s*print/) {
 		handle_print($line);
+		$line_count++;
 	} elsif ($line =~ /^\s*if/ || $line =~ /else/ || $line =~ /elsif/ || $line =~ /^\s*while/) {
 		handle_if_while($line);
+		$line_count++;
 	} elsif ($line =~ "}") {
 	} elsif ($line =~ /chomp/) {
 		handle_chomp($line);
+		$line_count++;
 	} elsif ($line =~ /split/) {
 		handle_split($line);
+		$line_count++;
 	} elsif ($line =~ /foreach/ || $line =~ /for/) {
 		handle_for_loop($line);
+		$line_count++;
 	} elsif ($line =~ /join/) {
 		$line = handle_join($line);
 		$line .= "\n";
 		push @main_content, $line;
+		$line_count++;
 	} elsif ($line =~ /\+\+/ || $line =~ /\-\-/) {
 		$line = handle_crement($line);
 		$line .= "\n";
 		push @main_content, $line;
+		$line_count++;
 	} else {
 		my ($spaces) = $line =~ /(\s*)\w/;
 		my @line_content = ();
@@ -74,6 +83,12 @@ sub main {
 		@line_content = join(" ", @line_content);
 		push @line_content, "\n";
 		push @main_content, @line_content;
+		$line_count++;
+		$unsure_line = $line_count;
+		# my %index;
+		# @index{@main_content} = (0..$#main_content);
+		# my $index = $index{\@line_content};
+		# print $index, "\n";
 	}
 }
 
@@ -161,13 +176,19 @@ sub handle_split {
 	push @main_content, @line_content;
 }
 
+sub handle_regex {
+	
+}
+
 sub handle_if_while {
 	my $line = $_[0];
 	my @line_content = ();
+	$line =~ s/\}\s//;
 	$line =~ s/elsif/elif/;
 	my ($space) = $line =~ /(\s*\w+)/;
 	$line =~ s/$space\s*//;
 	push @line_content, $space;
+	# print $line;
 	my ($condition) = $line =~ /\((.*?)\)/;
 	$line =~ s/$condition//;
 	# print $condition;
@@ -196,13 +217,12 @@ sub handle_for_loop {
 	if ($thing_to_loop =~ /.*;.*;.*/) { # handle for loops in form of 'for ($i = 0; $i < 5; $i++)'
 		
 	} else { # handle for loops in form of 'foreach $i (@arr)'
-		my @vars = $line =~ /foreach\s(.*?)\s\(/;
+		my @vars = $line =~ /[foreach|for]\s(.*?)\s\(/;
 		foreach (@vars) {
 			$_ = handle_variable($_);
 			push @line_content, $_;
 		}
 		push @line_content, "in";
-		# print $thing_to_loop;
 		if ($thing_to_loop =~ /\.\./) {
 			my ($start, $end) = $thing_to_loop =~ /(\w+)\.\.(\w+)/;
 			my $var = "";
@@ -220,6 +240,8 @@ sub handle_for_loop {
 			} else {
 				push @line_content, "xrange($start, $end)";
 			}
+		} elsif ($thing_to_loop =~ /\w+\,\w+\,/) {
+			push @line_content, '[' . $thing_to_loop . ']';
 		} else {
 			if (exists $syntax_table{$thing_to_loop}) {
 				push @line_content, $syntax_table{$thing_to_loop};
@@ -339,6 +361,9 @@ sub set_up_syntax_table {
 	$syntax_table{"x="} = "*=";
 	$syntax_table{"&&="} = "&=";
 	$syntax_table{"||="} = "|=";
+	
+	# string concatination
+	$syntax_table{"."} = "+";
 	
 	$syntax_table{"undef"} = "None";
 	$syntax_table{"foreach"} = "for";
