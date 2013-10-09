@@ -46,6 +46,14 @@ sub main {
 	} elsif ($line =~ "}") {
 	} elsif ($line =~ /chomp/) {
 		handle_chomp($line);
+	} elsif ($line =~ /split/) {
+		handle_split($line);
+	} elsif ($line =~ /foreach/ || $line =~ /for/) {
+		handle_for_loop($line);
+	} elsif ($line =~ /join/) {
+		$line = handle_join($line);
+		$line .= "\n";
+		push @main_content, $line;
 	} else {
 		my ($spaces) = $line =~ /(\s*)\w/;
 		my @line_content = ();
@@ -112,6 +120,26 @@ sub handle_chomp {
 	push @main_content, @line_content;
 }
 
+sub handle_split {
+	my $line = $_[0];
+	my @line_content = ();
+	my ($var) = $line =~ /\s*[\$\@\%](\w+)\s*=/;
+	my ($space) = $line =~ /(\s*)\w/;
+	my ($condition) = $line =~ /\((.*?)\)/;
+	my @components = split(/,\s/, $condition);
+	my ($delimiter) = $components[0] =~ /\/(.*?)\//;
+	push @line_content, $space;
+	push @line_content, "$var = " if ($var);
+	push @line_content, $components[1];
+	if ($delimiter =~ /\s+/) {
+		push @line_content, ".split()";
+	} else {
+		push @line_content, ".split($delimiter)";
+	}
+	push @line_content, "\n";
+	push @main_content, @line_content;
+}
+
 sub handle_if_while {
 	my $line = $_[0];
 	my @line_content = ();
@@ -138,32 +166,33 @@ sub handle_if_while {
 
 sub handle_join {
 	my $line = $_[0];
-	my @line_content = ();
+	my $string = "";
+	my ($space) = $line =~ /(\s*)\w+/;
 	my ($var) = $line =~ /[\$\@\%](\w+)\s*=\s*join/;
 	my ($content) = $line =~ /\((.*?)\)/;
 	my @subContents = split(/,\s*/, $content);
 	my $delimiter = $subContents[0];
 	if ($var) {
-		push @line_content, "$var = ";
+		$string .= $space . "$var = ";
 	}
-	push @line_content, "$delimiter.join(";
+	$string .= $delimiter . ".join(";
 	my $temp = "";
 	for (my $i = 1; $i < @subContents; $i += 1) {
 		if (exists $syntax_table{$subContents[$i]}) {
 			$temp .= $syntax_table{$subContents[$i]};
 			handle_imports("sys") if ($syntax_table{$subContents[$i]} =~ /sys/);
 		} else {
-			$temp .= $subContents[$i];
+			$temp .= handle_variable($subContents[$i]);
 		}
 		next if (@subContents == 2 || $i + 1 == @subContents);
 		$temp .= ", ";
 	}
 	if (@subContents > 2) {
-		push @line_content, "[$temp])";
+		$string .= "[$temp])";
 	} else {
-		push @line_content, "$temp)";
+		$string .= "$temp)";
 	}
-	push @main_content, @line_content;
+	return $string;
 }
 
 sub handle_print {
@@ -174,6 +203,11 @@ sub handle_print {
 	# print $spaces;
 	push @line_content, $spaces;
 	$line =~ s/$spaces//;
+	if ($line =~ /join\(.*?\)/) {
+		my $string = handle_join($line);
+		$line =~ s/join\(.*?\)//;
+		push @line_content, $string;
+	}
 	my @components = split(/,\s|\.\s/, $line);
 	# print @components;
 	foreach my $c (@components) {
@@ -191,9 +225,12 @@ sub handle_print {
 					$var .= "$w";
 					push @line_content, $var;
 					$was_variable = 1;
+					$was_string = 0;
 				} else {
 					$string .= "," if ($was_variable);
 					$string .= " $w";
+					$was_string = 1;
+					$was_variable = 0;
 				}
 			}
 			push @line_content, "\"$string\"" if ($string);
