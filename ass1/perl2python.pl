@@ -18,6 +18,7 @@ if (@ARGV > 0) {
 }
 
 sub read_from_file {
+	set_up_syntax_table();
 	open(F, "<$input_file") or die "Cannot open $input_file";
 	while (my $line = <F>) {
 		main($line);	
@@ -26,6 +27,7 @@ sub read_from_file {
 }
 
 sub read_from_stdin {
+	set_up_syntax_table();
 	while (my $line = <STDIN>) {
 		main($line);	
 	}
@@ -42,6 +44,8 @@ sub main {
 	} elsif ($line =~ /^\s*if/ || $line =~ /else/ || $line =~ /elsif/ || $line =~ /^\s*while/) {
 		handle_if_while($line);
 	} elsif ($line =~ "}") {
+	} elsif ($line =~ /chomp/) {
+		handle_chomp($line);
 	} else {
 		my ($spaces) = $line =~ /(\s*)\w/;
 		my @line_content = ();
@@ -95,6 +99,19 @@ sub handle_imports {
 	}
 }
 
+sub handle_chomp {
+	my $line = $_[0];
+	my @line_content = ();
+	my ($space) = $line =~ /(\s*)\w/;
+	my ($var) = $line =~ /[\$\@\%](\w+)/;
+	push @line_content, $space;
+	push @line_content, $var;
+	push @line_content, " = ";
+	push @line_content, "$var.rstrip()\n";
+	@line_content = join(" ", @line_content);
+	push @main_content, @line_content;
+}
+
 sub handle_if_while {
 	my $line = $_[0];
 	my @line_content = ();
@@ -106,10 +123,8 @@ sub handle_if_while {
 	$line =~ s/$condition//;
 	# print $condition;
 	my @components = split(/\s/, $condition);
-	foreach my $c (@components) {
-		
+	foreach my $c (@components) {	
 		if (exists $syntax_table{$c}) {
-			print $syntax_table{$c};
 			push @line_content, $syntax_table{$c};
 		} else {
 			push @line_content, handle_variable($c);
