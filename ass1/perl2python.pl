@@ -36,7 +36,7 @@ sub main {
 		$header_content .= "#!/usr/bin/python2.7 -u\n";
 	} elsif ($line =~ /^\s*print/) {
 		handle_print($line);
-	} elsif ($line =~ /^\s*if/ || $line =~ /^\s*while/) {
+	} elsif ($line =~ /^\s*if/ || $line =~ /else/ || $line =~ /elsif/ || $line =~ /^\s*while/) {
 		handle_if_while($line);
 	} elsif ($line =~ "}") {
 	} else {
@@ -84,8 +84,9 @@ sub has_variable {
 sub handle_if_while {
 	my $line = $_[0];
 	my @line_content = ();
+	$line =~ s/elsif/elif/;
 	my ($space) = $line =~ /(\s*\w+)/;
-	$line =~ s/$space//;
+	$line =~ s/$space\s*//;
 	push @line_content, $space;
 	my ($condition) = $line =~ /\((.*?)\)/;
 	$line =~ s/$condition//;
