@@ -54,6 +54,10 @@ sub main {
 		$line = handle_join($line);
 		$line .= "\n";
 		push @main_content, $line;
+	} elsif ($line =~ /\+\+/ || $line =~ /\-\-/) {
+		$line = handle_crement($line);
+		$line .= "\n";
+		push @main_content, $line;
 	} else {
 		my ($spaces) = $line =~ /(\s*)\w/;
 		my @line_content = ();
@@ -61,6 +65,7 @@ sub main {
 		foreach my $c (@components) {
 			if (exists $syntax_table{$c}) {
 				push @line_content, $syntax_table{$c};
+				handle_imports("sys") if ($syntax_table{$c} =~ /sys/);
 			} else {
 				$c = handle_variable($c);
 				push @line_content, "$c";
@@ -107,6 +112,20 @@ sub handle_imports {
 	}
 }
 
+sub handle_crement {
+	my $line = $_[0];
+	my $str = "";
+	print $line;
+	my ($space) = $line =~ /(\s*)\w/;
+	my ($var) = $line =~ /[\$\%\@](\w+)/;
+	if ($line =~ /\+\+/) {
+		$str .= $space . $var . " += 1";
+	} elsif ($line =~ /\-\-/) {
+		$str .= $space . $var . " -= 1";
+	}
+	return $str;
+}
+
 sub handle_chomp {
 	my $line = $_[0];
 	my @line_content = ();
@@ -120,6 +139,8 @@ sub handle_chomp {
 	push @main_content, @line_content;
 }
 
+# need to come back
+# TODO:
 sub handle_split {
 	my $line = $_[0];
 	my @line_content = ();
@@ -130,11 +151,11 @@ sub handle_split {
 	my ($delimiter) = $components[0] =~ /\/(.*?)\//;
 	push @line_content, $space;
 	push @line_content, "$var = " if ($var);
-	push @line_content, $components[1];
-	if ($delimiter =~ /\s+/) {
-		push @line_content, ".split()";
+	if ($delimiter !~ /\\s+/) {
+		push @line_content, "re.split(\'$delimiter\', $components[1])";
 	} else {
-		push @line_content, ".split($delimiter)";
+		push @line_content, $components[1];
+		push @line_content, ".split()";
 	}
 	push @line_content, "\n";
 	push @main_content, @line_content;
@@ -151,15 +172,64 @@ sub handle_if_while {
 	$line =~ s/$condition//;
 	# print $condition;
 	my @components = split(/\s/, $condition);
-	foreach my $c (@components) {	
+	foreach my $c (@components) {
 		if (exists $syntax_table{$c}) {
 			push @line_content, $syntax_table{$c};
+			handle_imports("sys") if ($syntax_table{$c} =~ /sys/);
 		} else {
 			push @line_content, handle_variable($c);
 		}
 	}
 	@line_content = join(" ", @line_content);
 	push @line_content, ":" if ($line =~ /\s*{/);
+	push @line_content, "\n";
+	push @main_content, @line_content;
+}
+
+sub handle_for_loop {
+	my $line = $_[0];
+	my @line_content = ();
+	my ($thing_to_loop) = $line =~ /\((.*?)\)/;
+	my ($space) = $line =~ /(\s*)\w/;
+	push @line_content, $space;
+	push @line_content, "for";
+	if ($thing_to_loop =~ /.*;.*;.*/) { # handle for loops in form of 'for ($i = 0; $i < 5; $i++)'
+		
+	} else { # handle for loops in form of 'foreach $i (@arr)'
+		my @vars = $line =~ /foreach\s(.*?)\s\(/;
+		foreach (@vars) {
+			$_ = handle_variable($_);
+			push @line_content, $_;
+		}
+		push @line_content, "in";
+		# print $thing_to_loop;
+		if ($thing_to_loop =~ /\.\./) {
+			my ($start, $end) = $thing_to_loop =~ /(\w+)\.\.(\w+)/;
+			my $var = "";
+			if ($end =~ /\d+/) {
+				$end += 1;
+			} elsif ($end =~ /\$\#/) {
+				$var = $end =~ /\$\#(\w+)/;
+				if (exists $syntax_table{$var}) {
+					$var = $syntax_table{$var};
+				}
+				$var = "xrange(len($var) - 1)";
+			}
+			if ($var) {
+				push @line_content, $var;
+			} else {
+				push @line_content, "xrange($start, $end)";
+			}
+		} else {
+			if (exists $syntax_table{$thing_to_loop}) {
+				push @line_content, $syntax_table{$thing_to_loop};
+			} else {
+				push @line_content, handle_variable($thing_to_loop);
+			}
+		}
+	}
+	@line_content = join(" ", @line_content);
+	push @line_content, ":";
 	push @line_content, "\n";
 	push @main_content, @line_content;
 }
@@ -214,7 +284,7 @@ sub handle_print {
 		my ($inside_quotes) = $c =~ /"(.*?)"/;
 		if ($inside_quotes) {
 			my @words = split(/\s/, $inside_quotes);
-			my $string = "";
+			my @string = ();
 			my $var = "";
 			my $was_variable = 0;
 			my $was_string = 0;
@@ -227,13 +297,14 @@ sub handle_print {
 					$was_variable = 1;
 					$was_string = 0;
 				} else {
-					$string .= "," if ($was_variable);
-					$string .= " $w";
+					push @line_content, "," if ($was_variable);
+					push @string, "$w";
 					$was_string = 1;
 					$was_variable = 0;
 				}
 			}
-			push @line_content, "\"$string\"" if ($string);
+			@string = join(" ", @string);
+			push @line_content, "\"@string\"" if (@string);
 		} else {
 			push @line_content, handle_variable($c) if ($c !~ "\"\"");
 		}	
@@ -246,6 +317,7 @@ sub handle_print {
 sub set_up_syntax_table {
 	$syntax_table{"<STDIN>"} = "sys.stdin.readline()";
 	$syntax_table{'@ARGV'} = "sys.argv[1:]";
+	$syntax_table{'ARGV'} = "sys.argv[1:]";
 	$syntax_table{"last"} = "break";
 	$syntax_table{"next"} = "continue";
 	
@@ -269,4 +341,5 @@ sub set_up_syntax_table {
 	$syntax_table{"||="} = "|=";
 	
 	$syntax_table{"undef"} = "None";
+	$syntax_table{"foreach"} = "for";
 }
